@@ -47,7 +47,8 @@ module Kontena
         'Image' => image,
         'Cmd' => [
           '--logtostderr=true',
-          '--listen_ip=127.0.0.1'
+          '--listen_ip=127.0.0.1',
+          '--storage_duration=2m'
         ],
         'Volumes' => {
           '/rootfs' => {},
@@ -55,7 +56,6 @@ module Kontena
           '/sys' => {},
           '/var/lib/docker' => {}
         },
-        'ExposedPorts' => {'8080/tcp' => {}},
         'HostConfig' => {
           'Binds' => [
             '/:/rootfs:ro',

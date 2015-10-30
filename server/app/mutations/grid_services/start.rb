@@ -10,20 +10,13 @@ module GridServices
       begin
         self.grid_service.set_state('starting')
         self.grid_service.containers.scoped.each do |container|
-          starter_for(container).start_container
+          Docker::ServiceStarter.new(container.host_node).start_service_instance(container.name)
         end
         self.grid_service.set_state('running')
       rescue => exc
         self.grid_service.set_state(prev_state)
         raise exc
       end
-    end
-
-    ##
-    # @param [Container] container
-    # @return [Docker::ContainerStarter]
-    def starter_for(container)
-      Docker::ContainerStarter.new(container)
     end
   end
 end

@@ -27,6 +27,9 @@ class GridService
   field :state, type: String, default: 'initialized'
   field :log_driver, type: String
   field :log_opts, type: Hash, default: {}
+  field :devices, type: Array, default: []
+
+  field :strategy, type: String, default: 'ha'
 
   belongs_to :grid
   belongs_to :image

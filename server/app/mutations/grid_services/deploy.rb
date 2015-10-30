@@ -13,12 +13,12 @@ module GridServices
     end
 
     required do
-      model :current_user, class: User
       model :grid_service
       string :strategy, nils: true, default: 'ha'
     end
 
     optional do
+      model :current_user, class: User
       integer :wait_for_port
     end
 
