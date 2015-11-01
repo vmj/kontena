@@ -36,7 +36,11 @@ class GridServiceDeployer
   # @param [Hash] creds
   # @return [Celluloid::Future]
   def deploy_async(creds = nil)
-    Celluloid::Future.new{ self.deploy(creds) }
+    Celluloid::Future.new{
+      with_dlock("deploy_async/#{self.grid_service.id}") do
+        self.deploy(creds)
+      end
+    }
   end
 
   ##
