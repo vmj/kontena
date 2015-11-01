@@ -1,5 +1,5 @@
 module Docker
-  class ServiceStopper
+  class ServiceRestarter
 
     attr_reader :host_node
 

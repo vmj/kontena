@@ -73,7 +73,6 @@ module Agent
       state = info['State'] || {}
       container.attributes = {
           container_id: info['Id'],
-          deploy_rev: labels['io.kontena.container.deploy_rev'],
           driver: info['Driver'],
           exec_driver: info['ExecDriver'],
           image: config['Image'],
@@ -92,6 +91,9 @@ module Agent
           started_at: (state['StartedAt'] ? Time.parse(state['StartedAt']) : nil),
           deleted_at: nil
       }
+      if labels['io.kontena.container.deploy_rev']
+        container.deploy_rev = labels['io.kontena.container.deploy_rev']
+      end
       if info['NetworkSettings']
         container.network_settings = self.parse_docker_network_settings(info['NetworkSettings'])
       end

@@ -5,6 +5,7 @@ require_relative 'load_balancer_configurer'
 
 class GridServiceDeployer
   include Logging
+  include DistributedLocks
 
   attr_reader :grid_service, :nodes, :scheduler, :config
 
@@ -49,6 +50,9 @@ class GridServiceDeployer
     pulled_nodes = Set.new
     deploy_rev = Time.now.utc.to_s
     self.grid_service.container_count.times do |i|
+      unless self.grid_service.deploying?
+        raise "halting deploy of #{self.grid_service.name}, state has changed"
+      end
       node = self.scheduler.select_node(self.grid_service, i, self.nodes)
       unless node
         raise "Cannot find applicable node for service instance #{self.grid_service.name}-#{i}"
@@ -62,7 +66,8 @@ class GridServiceDeployer
     end
 
     self.grid_service.containers.where(:deploy_rev => {:$ne => deploy_rev}).each do |container|
-      self.terminate_service_instance(container.host_node, container.name)
+      instance_number = container.name.match(/^.+-(\d+)$/)[1]
+      self.terminate_service_instance(instance_number, container.host_node)
     end
     self.grid_service.set_state('running')
 
@@ -82,7 +87,11 @@ class GridServiceDeployer
   # @param [Hash] creds
   # @return [Celluloid::Future]
   def deploy_async(creds = nil)
-    Celluloid::Future.new{ self.deploy(creds) }
+    Celluloid::Future.new{
+      with_dlock("deploy_async/#{self.grid_service.id}") do
+        self.deploy(creds)
+      end
+    }
   end
 
   ##
@@ -105,19 +114,20 @@ class GridServiceDeployer
   # @param [Integer] instance_number
   # @param [String] deploy_rev
   def deploy_service_instance(node, instance_number, deploy_rev)
-    container_name = "#{self.grid_service.name}-#{instance_number}"
-    old_container = self.grid_service.containers.find_by(name: container_name)
-    if old_container && old_container.host_node && old_container.host_node != node
-      self.terminate_service_instance(old_container.host_node, container_name)
-      p "terminate old #{container_name}"
+    if !self.service_exists_on_node?(node, instance_number)
+      self.terminate_service_instance(instance_number)
     end
 
-    creator = Docker::ServiceCreator.new(self.grid_service, node)
-    creator.create_service_instance(instance_number, deploy_rev)
+    self.create_service_instance(node, instance_number, deploy_rev)
+    self.wait_for_service_to_start(instance_number, deploy_rev)
+  end
 
+  # @param [String] instance_number
+  # @param [String] deploy_rev
+  def wait_for_service_to_start(instance_number, deploy_rev)
     # node/agent has 60 seconds to do it's job
     Timeout.timeout(60) do
-      sleep 0.5 until !self.grid_service.containers.find_by(name: container_name, deploy_rev: deploy_rev).nil?
+      sleep 0.5 until self.deployed_service_container_exists?(instance_number, deploy_rev)
       if self.config[:wait_for_port]
         sleep 0.5 until port_responding?(node, self.config[:wait_for_port])
       end
@@ -125,10 +135,43 @@ class GridServiceDeployer
   end
 
   # @param [HostNode] node
-  # @param [String] instance_name
-  def terminate_service_instance(node, instance_name)
+  # @param [String] instance_number
+  # @return [Boolean]
+  def service_exists_on_node?(node, instance_number)
+    container_name = "#{self.grid_service.name}-#{instance_number}"
+    old_container = self.grid_service.containers.find_by(name: container_name)
+    old_container && old_container.host_node && old_container.host_node == node
+  end
+
+  # @param [HostNode] node
+  # @param [String] instance_number
+  # @param [String] deploy_rev
+  def create_service_instance(node, instance_number, deploy_rev)
+    creator = Docker::ServiceCreator.new(self.grid_service, node)
+    creator.create_service_instance(instance_number, deploy_rev)
+  end
+
+  # @param [String] instance_number
+  # @param [String] deploy_rev
+  # @return [Boolean]
+  def deployed_service_container_exists?(instance_number, deploy_rev)
+    container_name = "#{self.grid_service.name}-#{instance_number}"
+    !self.grid_service.containers.find_by(name: container_name, deploy_rev: deploy_rev).nil?
+  end
+
+  # @param [String] instance_number
+  # @param [HostNode] node
+  def terminate_service_instance(instance_number, node = nil)
+    container_name = "#{self.grid_service.name}-#{instance_number}"
+    if node.nil?
+      container = self.grid_service.containers.find_by(name: container_name)
+      return unless container
+      return unless container.host_node
+      node = container.host_node
+    end
+    return unless node
     terminator = Docker::ServiceTerminator.new(node)
-    terminator.terminate_service_instance(instance_name)
+    terminator.terminate_service_instance(container_name)
   end
 
   ##

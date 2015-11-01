@@ -8,7 +8,7 @@ class GridService
   field :labels, type: Hash, default: {}
   field :affinity, type: Array, default: []
   field :name, type: String
-  field :stateful, type: Boolean
+  field :stateful, type: Boolean, default: false
   field :user, type: String
   field :container_count, type: Fixnum, default: 1
   field :cmd, type: Array
@@ -89,6 +89,16 @@ class GridService
   # @return [Array<GridService>]
   def linked_to_load_balancers
     self.grid_service_links.map{|l| l.linked_grid_service }.select{|s| s.load_balancer? }
+  end
+
+  # @param [GridService] service
+  # @param [String] service_alias
+  def link_to(service, service_alias = nil)
+    service_alias = service.name if service_alias.nil?
+    self.grid_service_links << GridServiceLink.new(
+      linked_grid_service: service,
+      alias: service_alias
+    )
   end
 
   # @return [Hash]

@@ -12,7 +12,7 @@ module Scheduler
         candidates = nodes.dup
         nodes.each do |node|
           service.affinity.each do |affinity|
-            affinity = affinity % [instance_number]
+            affinity = affinity % [instance_number.to_s]
             key, comparator, value = split_affinity(affinity)
             if key == 'node'
               unless node_match?(node, comparator, value)
